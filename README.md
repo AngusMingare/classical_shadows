@@ -1,1 +1,1 @@
-# classical_shadows
+# Classical Shadows
