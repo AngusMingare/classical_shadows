@@ -1,5 +1,5 @@
 from qiskit import QuantumCircuit
-from .qst import quantumStateTomography
+from qst import quantumStateTomography
 import numpy as np
 
 def quantumProcessTomography(circ, qubit, shots=1024):
