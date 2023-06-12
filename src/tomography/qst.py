@@ -1,7 +1,7 @@
 from qiskit import QuantumCircuit, ClassicalRegister, execute, Aer
 import numpy as np
 
-def quantum_state_tomography(prep_circ, qubit, shots=1024):
+def quantumStateTomography(prep_circ, qubit, shots=1024):
     """Perform quantum state tomography on the state prepared by a quantum circuit
 
     Given a quantum circuit that prepares some quantum state |a>, this function

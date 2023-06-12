@@ -1,8 +1,8 @@
 from qiskit import QuantumCircuit
-from qst import quantum_state_tomography
+from .qst import quantumStateTomography
 import numpy as np
 
-def quantum_process_tomography(circ, qubit, shots=1024):
+def quantumProcessTomography(circ, qubit, shots=1024):
     """Perform quantum process tomography
 
     Given a quantum circuit acting on any number of qubits, determine the process
@@ -38,10 +38,10 @@ def quantum_process_tomography(circ, qubit, shots=1024):
     prep4.s(qubit)
     prep4.append(circ, list(range(circ.num_qubits)))
     
-    qst1 = quantum_state_tomography(prep1, qubit, shots)
-    qst2 = quantum_state_tomography(prep2, qubit, shots)
-    qst3 = quantum_state_tomography(prep3, qubit, shots)
-    qst4 = quantum_state_tomography(prep4, qubit, shots)
+    qst1 = quantumStateTomography(prep1, qubit, shots)
+    qst2 = quantumStateTomography(prep2, qubit, shots)
+    qst3 = quantumStateTomography(prep3, qubit, shots)
+    qst4 = quantumStateTomography(prep4, qubit, shots)
     
     rho1 = qst1
     rho4 = qst2
@@ -59,7 +59,7 @@ def quantum_process_tomography(circ, qubit, shots=1024):
     
     return chi
 
-def chi_to_choi(chi_matrix):
+def chiToChoi(chi_matrix):
     """Convert chi matrix to Choi matrix
 
     Convert the chi matrix describing the quantum process on a single qubit
@@ -94,7 +94,7 @@ def chi_to_choi(chi_matrix):
 
     return choi_matrix
 
-def choi_to_evolution(choi_matrix):
+def choiToEvolution(choi_matrix):
     """Convert a Choi matrix into an evolution matrix
 
     Convert a Choi matrix describing a quantum process on a single qubit

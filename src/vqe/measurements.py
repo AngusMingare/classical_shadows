@@ -155,9 +155,7 @@ def decomposeObservable(observable):
         coeff = np.trace(np.matmul(observable, pauli_matrix)) / (2 ** n_qubits)
         pauli_dict[pauli_string] = coeff
     
-    return pauli_dict
-
-    
+    return pauli_dict 
 
 def measureObservable(circ, qubit_indices, observable, shots=1024):
     """Measure the expectation value of an observable
