@@ -194,3 +194,12 @@ def measureObservable(circ, qubit_indices, observable, shots=1024):
         total_exp += exp*coefficient
     
     return total_exp
+
+def measurePauliObservableQWC():
+    return
+
+def measurePauliObservableGC():
+    return
+
+def measurePauliObservableAC():
+    return 
