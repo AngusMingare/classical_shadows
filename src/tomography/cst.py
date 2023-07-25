@@ -1,7 +1,7 @@
 import numpy as np
 from typing import Union, List
 import symmer
-from scipy.sparse import csr_matrix
+from scipy.sparse import csr_matrix, kron
 from qiskit import QuantumCircuit, ClassicalRegister, Aer, execute
 from qiskit.quantum_info import random_clifford, Clifford
 from src.vqe.measurements import decomposeObservable
@@ -20,9 +20,11 @@ class ClassicalShadow:
 
     def samplePauliEnsemble(self):
         pauli_unitary = QuantumCircuit(self.num_qubits)
+        pauli_list = []
         paulis = ["x", "y", "z"]
         for i in range(self.num_qubits):
             pauli = np.random.choice(paulis)
+            pauli_list.append(pauli)
             if pauli == "x":
                 pauli_unitary.h(i)
             elif pauli == "y":
@@ -31,7 +33,7 @@ class ClassicalShadow:
             elif pauli == "z":
                 pass
 
-        return pauli_unitary
+        return pauli_unitary, pauli_list
     
     def sampleRandomCliffordEnsemble(self):
         cliff = random_clifford(self.num_qubits)
@@ -58,7 +60,7 @@ class ClassicalShadow:
         for _ in range(num_shadows):
             # Select unitary from ensemble
             if unitary_ensemble == "pauli":
-                unitary = self.samplePauliEnsemble()
+                unitary, pauli_list = self.samplePauliEnsemble()
             elif unitary_ensemble == "random clifford":
                 unitary = self.sampleRandomCliffordEnsemble()
 
@@ -72,26 +74,50 @@ class ClassicalShadow:
             backend = Aer.get_backend("qasm_simulator")
             job = execute(qc, backend=backend, shots=1, memory=True)
             bitstring = list(job.result().get_counts().keys())[0]
- 
-            # Apply U^dagger
-            unitary_inverse = unitary.inverse()
-            u = self.getUnitaryFromCirc(unitary)
-            udg = self.getUnitaryFromCirc(unitary_inverse) 
-            
+
             zero = np.array([1,0])
             one = np.array([0,1])
-            temp = []
-            for bit in bitstring:
-                if bit == "0":
-                    temp.append(zero)
-                else:
-                    temp.append(one)
-            for i in range(len(temp)-1):
-                temp[i+1] = np.kron(temp[i], temp[i+1])
-            vec = temp[-1]
-            bitstring_array = csr_matrix(np.outer(vec, vec))
-            snapshot = udg @ bitstring_array @ u
-            snapshots.append(snapshot)
+            h = np.array([[1/np.sqrt(2), 1/np.sqrt(2)],[1/np.sqrt(2), -1/np.sqrt(2)]])
+            s = np.array([[1,0],[0,1j]])
+            sdg = np.array([[1,0],[0,-1j]])
+ 
+            # Apply U^dagger
+            if unitary_ensemble == "random clifford":
+                unitary_inverse = unitary.inverse()
+                u = self.getUnitaryFromCirc(unitary)
+                udg = self.getUnitaryFromCirc(unitary_inverse) 
+                temp = []
+                for bit in bitstring:
+                    if bit == "0":
+                        temp.append(zero)
+                    else:
+                        temp.append(one)
+                for i in range(len(temp)-1):
+                    temp[i+1] = np.kron(temp[i], temp[i+1])
+                vec = temp[-1]
+                bitstring_array = csr_matrix(np.outer(vec, vec))
+                snapshot = udg @ bitstring_array @ u
+                snapshots.append(snapshot)
+            elif unitary_ensemble == "pauli":
+                snapshot = []
+                for i in range(self.num_qubits):
+                    bitstring = bitstring[::-1]
+                    bit = bitstring[i]
+                    sq_snapshot = np.outer(zero,zero) if bit == "0" else np.outer(one,one)
+                    pauli = pauli_list[i]
+                    if pauli == "x":
+                        u = h
+                        udg = h
+                    elif pauli == "y":
+                        u = h @ sdg
+                        udg = s @ h
+                    elif pauli == "z":
+                        u = np.identity(2)
+                        udg = np.identity(2)
+                    sq_snapshot = udg @ sq_snapshot @ u
+                    sq_snapshot = csr_matrix(sq_snapshot)
+                    snapshot.append(sq_snapshot)
+                snapshots.append(snapshot)
         return snapshots
 
     def getQuantumChannel(self, unitary_ensemble):
@@ -107,25 +133,12 @@ class ClassicalShadow:
             return channel
         elif isinstance(unitary_ensemble, str) and unitary_ensemble.lower() == "pauli":
             def channel(x):
-                x = decomposeObservable(x.todense())
                 to_be_tensored = []
                 for i in range(self.num_qubits):
-                    to_be_summed = []
-                    for j in range(len(x.keys())):
-                        pauli = list(x.keys())[j][i]
-                        if pauli == 'I':
-                          term = csr_matrix(np.array([[1,0],[0,1]]))
-                        elif pauli == 'X':
-                            term = csr_matrix(np.array([[0,1],[1,0]]))
-                        elif pauli == 'Y':
-                            term = csr_matrix(np.array([[0,-1j],[1j, 0]]))
-                        elif pauli == 'Z':
-                            term = csr_matrix(np.array([[1,0],[0,-1]]))
-                        to_be_summed.append(list(x.values())[j] * term)
-                    m1 = 3 * sum(to_be_summed) - csr_matrix(np.identity(2))
+                    m1 = 3 * x[i] - csr_matrix(np.identity(2))
                     to_be_tensored.append(m1)
-                for i in range(len(to_be_tensored)-1):
-                    to_be_tensored[i+1] = np.kron(to_be_tensored[i], to_be_tensored[i+1])
+                for i in range(self.num_qubits-1):
+                    to_be_tensored[i+1] = kron(to_be_tensored[i], to_be_tensored[i+1])
                 mP = to_be_tensored[-1]
                 return mP
             return channel
@@ -191,7 +204,7 @@ if __name__ == "__main__":
     PauliZ = [[1,0], [0,-1]]
 
     qc = QuantumCircuit(1)
-    # qc.h(0)
+    qc.h(0)
     obs = [csr_matrix(PauliZ), csr_matrix(PauliX)]
 
     classical_shadow =  ClassicalShadow(qc, obs)

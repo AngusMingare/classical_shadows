@@ -31,6 +31,7 @@ def measurePauliString(circ, qubit_indices, pauli_string):
     cl_bits = list(range(circ.num_clbits))
 
     for idx, p in zip(qubit_indices, list(pauli_string.strip())):
+        idx = len(pauli_string)-1-idx
         if p == "I":
             pass
         elif p == "X":
