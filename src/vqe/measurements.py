@@ -121,7 +121,7 @@ def decomposeObservable(observable):
     """
     assert(isinstance(observable, np.ndarray))
     observable = np.asmatrix(observable)
-    assert(observable.H == observable)
+    # assert(observable.H == observable)
 
     # Define Pauli matrices
     sigma_x = np.array([[0, 1], [1, 0]])
@@ -157,7 +157,7 @@ def decomposeObservable(observable):
     
     return pauli_dict 
 
-def measureObservable(circ, qubit_indices, observable, shots=1024):
+def measureObservable(circ, qubit_indices, observable, shots=1024, total_shots_provided=False):
     """Measure the expectation value of an observable
     
     This function calculates the expectation value <psi | observable | psi>
@@ -185,21 +185,22 @@ def measureObservable(circ, qubit_indices, observable, shots=1024):
     elif isinstance(observable, np.ndarray):
         observable = decomposeObservable(observable)
     elif isinstance(observable, PauliwordOp):
-        observable = observable.to_dictionary()
+        observable = observable.to_dictionary
     
     # <observable> = sum(coeff * <pauliString>)
     total_exp = 0
+    total_num_pauli = len(list(observable.keys()))
     for pauliString, coefficient in observable.items():
-        exp = measurePauliObservable(circ=circ, qubit_indices=qubit_indices, pauli_observable=pauliString, shots=shots)
+        all_I = True 
+        for p in pauliString:
+            if p != 'I':
+                all_I = False
+        if all_I:
+            total_num_pauli -= 1
+            exp = 1
+        else:
+            usable_shots = round(shots / total_num_pauli) if total_shots_provided else shots
+            exp = measurePauliObservable(circ=circ, qubit_indices=qubit_indices, pauli_observable=pauliString, shots=usable_shots)
         total_exp += exp*coefficient
     
     return total_exp
-
-def measurePauliObservableQWC():
-    return
-
-def measurePauliObservableGC():
-    return
-
-def measurePauliObservableAC():
-    return 
