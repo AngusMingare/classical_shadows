@@ -101,9 +101,33 @@ class ClassicalShadow:
         if isinstance(unitary_ensemble, str) and unitary_ensemble.lower() not in self.allowed_measurement_bases:
             raise ValueError(unitary_ensemble + " is not an allowed measurement basis.")
         
-        if isinstance(unitary_ensemble, str) and (unitary_ensemble.lower() == "pauli" or unitary_ensemble.lower() == "random clifford"):
+        if isinstance(unitary_ensemble, str) and unitary_ensemble.lower() == "random clifford":
             def channel(x):
                 return (2**self.num_qubits + 1) * x - csr_matrix(np.identity(2**self.num_qubits))
+            return channel
+        elif isinstance(unitary_ensemble, str) and unitary_ensemble.lower() == "pauli":
+            def channel(x):
+                x = decomposeObservable(x.todense())
+                to_be_tensored = []
+                for i in range(self.num_qubits):
+                    to_be_summed = []
+                    for j in range(len(x.keys())):
+                        pauli = list(x.keys())[j][i]
+                        if pauli == 'I':
+                          term = csr_matrix(np.array([[1,0],[0,1]]))
+                        elif pauli == 'X':
+                            term = csr_matrix(np.array([[0,1],[1,0]]))
+                        elif pauli == 'Y':
+                            term = csr_matrix(np.array([[0,-1j],[1j, 0]]))
+                        elif pauli == 'Z':
+                            term = csr_matrix(np.array([[1,0],[0,-1]]))
+                        to_be_summed.append(list(x.values())[j] * term)
+                    m1 = 3 * sum(to_be_summed) - csr_matrix(np.identity(2))
+                    to_be_tensored.append(m1)
+                for i in range(len(to_be_tensored)-1):
+                    to_be_tensored[i+1] = np.kron(to_be_tensored[i], to_be_tensored[i+1])
+                mP = to_be_tensored[-1]
+                return mP
             return channel
         else:
             #TODO
@@ -172,6 +196,6 @@ if __name__ == "__main__":
 
     classical_shadow =  ClassicalShadow(qc, obs)
 
-    classical_shadow.createClassicalShadows(unitary_ensemble="random clifford", num_shadows=1000)
+    classical_shadow.createClassicalShadows(unitary_ensemble="pauli", num_shadows=1000)
     obs, results = classical_shadow.linearPredictions(10)
     print(results)
