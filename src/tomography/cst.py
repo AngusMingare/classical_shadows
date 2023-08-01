@@ -1,11 +1,9 @@
 import numpy as np
-from typing import Union, List
-import symmer
-from scipy.sparse import csr_matrix, kron
-from qiskit import QuantumCircuit, ClassicalRegister, Aer, execute
-from qiskit.quantum_info import random_clifford, Clifford
-from src.vqe.measurements import decomposeObservable
-from symmer import PauliwordOp
+from scipy.sparse import csr_matrix, kron, csr_array
+from qiskit import QuantumCircuit, Aer, execute
+from qiskit.quantum_info import random_clifford
+from functools import reduce
+from typing import List
 
 
 class ClassicalShadow:
@@ -37,14 +35,15 @@ class ClassicalShadow:
     
     def sampleRandomCliffordEnsemble(self):
         cliff = random_clifford(self.num_qubits)
-        clifford_unitary = cliff.to_circuit()
-        return clifford_unitary
+        clifford_matrix = csr_array(cliff.to_matrix())
+        clifford_unitary = cliff.to_instruction()
+        return clifford_unitary, clifford_matrix
     
     def getUnitaryFromCirc(self, circ):
         backend = Aer.get_backend("unitary_simulator")
         job = execute(circ, backend=backend)
         result = job.result()
-        return csr_matrix(result.get_unitary(circ, 9))
+        return csr_array(result.get_unitary(circ, 9))
     
     def getSnapshots(self, unitary_ensemble, num_shadows):
         if not isinstance(unitary_ensemble, str):
@@ -56,67 +55,60 @@ class ClassicalShadow:
         self.unitary_ensemble = unitary_ensemble
         self.num_shadows = num_shadows
 
+        sp_unitary = self.getUnitaryFromCirc(self.preparation_circuit)
+        input_state = np.zeros((2**self.num_qubits, 1))
+        input_state[0] = 1
+        input_state = csr_array(input_state, shape=(2**self.num_qubits, 1))
+        sp_state = sp_unitary @ input_state
+
         snapshots = []
         for _ in range(num_shadows):
             # Select unitary from ensemble
             if unitary_ensemble == "pauli":
                 unitary, pauli_list = self.samplePauliEnsemble()
+                matrix = self.getUnitaryFromCirc(unitary)
             elif unitary_ensemble == "random clifford":
-                unitary = self.sampleRandomCliffordEnsemble()
+                unitary, matrix = self.sampleRandomCliffordEnsemble()
 
-            # Make measurment
-            qc = QuantumCircuit(self.num_qubits)
-            qc.append(self.preparation_circuit, range(self.num_qubits))
-            qc.append(unitary, range(self.num_qubits))
-            cr = ClassicalRegister(self.num_qubits)
-            qc.add_register(cr)
-            qc.measure(range(self.num_qubits), range(self.num_qubits))
-            backend = Aer.get_backend("qasm_simulator")
-            job = execute(qc, backend=backend, shots=1, memory=True)
-            bitstring = list(job.result().get_counts().keys())[0]
+            def get_shot(u):
+                final_state = u @ sp_state
+                sample_probs = [np.abs(i)**2 for i in final_state.toarray().flatten()]
+                shot = np.random.choice(range(2**self.num_qubits), p=sample_probs)
+                shot_bin = bin(shot)[2:].zfill(self.num_qubits)
+                return shot_bin
+
+            bitstring = get_shot(matrix)
 
             zero = np.array([1,0])
             one = np.array([0,1])
-            h = np.array([[1/np.sqrt(2), 1/np.sqrt(2)],[1/np.sqrt(2), -1/np.sqrt(2)]])
-            s = np.array([[1,0],[0,1j]])
-            sdg = np.array([[1,0],[0,-1j]])
- 
+            h = csr_matrix(np.array([[1/np.sqrt(2), 1/np.sqrt(2)],[1/np.sqrt(2), -1/np.sqrt(2)]]))
+            sdg = csr_matrix(np.array([[1,0],[0,-1j]]))
+
             # Apply U^dagger
             if unitary_ensemble == "random clifford":
-                unitary_inverse = unitary.inverse()
-                u = self.getUnitaryFromCirc(unitary)
-                udg = self.getUnitaryFromCirc(unitary_inverse) 
-                temp = []
-                for bit in bitstring:
-                    if bit == "0":
-                        temp.append(zero)
-                    else:
-                        temp.append(one)
-                for i in range(len(temp)-1):
-                    temp[i+1] = np.kron(temp[i], temp[i+1])
-                vec = temp[-1]
-                bitstring_array = csr_matrix(np.outer(vec, vec))
-                snapshot = udg @ bitstring_array @ u
+                def bitstring_to_array(bitstring):
+                    temp = [zero if bit == '0' else one for bit in bitstring]
+                    vec = reduce(np.kron, temp)
+                    return csr_matrix(np.outer(vec, vec))
+                bitstring_array = bitstring_to_array(bitstring)
+                snapshot = matrix.getH() @ bitstring_array @ matrix
                 snapshots.append(snapshot)
+
             elif unitary_ensemble == "pauli":
-                snapshot = []
-                for i in range(self.num_qubits):
-                    bitstring = bitstring[::-1]
-                    bit = bitstring[i]
-                    sq_snapshot = np.outer(zero,zero) if bit == "0" else np.outer(one,one)
-                    pauli = pauli_list[i]
-                    if pauli == "x":
-                        u = h
-                        udg = h
-                    elif pauli == "y":
-                        u = h @ sdg
-                        udg = s @ h
-                    elif pauli == "z":
-                        u = np.identity(2)
-                        udg = np.identity(2)
-                    sq_snapshot = udg @ sq_snapshot @ u
-                    sq_snapshot = csr_matrix(sq_snapshot)
-                    snapshot.append(sq_snapshot)
+                bitstring = bitstring[::-1]
+                def get_sq_snapshots(bitstring, p_list):
+
+                    bitvals = [np.outer(zero,zero) if bit == '0' else np.outer(one,one) for bit in bitstring]
+                    def pauli_to_mat(p):
+                        if p == 'x': return h
+                        elif p == 'y': return h @ sdg 
+                        else: return csr_matrix(np.eye(2))
+                    us = [pauli_to_mat(p) for p in p_list]
+                    udgs = [u.getH() for u in us]
+
+                    snapshot = [csr_matrix(udgs[i] @ bitvals[i] @ us[i]) for i in range(self.num_qubits)]
+                    return snapshot
+                snapshot = get_sq_snapshots(bitstring, pauli_list)
                 snapshots.append(snapshot)
         return snapshots
 
@@ -137,9 +129,7 @@ class ClassicalShadow:
                 for i in range(self.num_qubits):
                     m1 = 3 * x[i] - csr_matrix(np.identity(2))
                     to_be_tensored.append(m1)
-                for i in range(self.num_qubits-1):
-                    to_be_tensored[i+1] = kron(to_be_tensored[i], to_be_tensored[i+1])
-                mP = to_be_tensored[-1]
+                mP = reduce(kron, to_be_tensored)
                 return mP
             return channel
         else:
@@ -150,11 +140,7 @@ class ClassicalShadow:
         snapshots = self.getSnapshots(unitary_ensemble, num_shadows)
         print("snapshots collected")
         channel = self.getQuantumChannel(unitary_ensemble)
-        self.shadows = []
-        for i in range(num_shadows):
-            shot = snapshots[i]
-            shadow = channel(shot)
-            self.shadows.append(shadow)
+        self.shadows = [channel(snapshots[i]) for i in range(num_shadows)]
         print("shadows obtained")
         return 
 
