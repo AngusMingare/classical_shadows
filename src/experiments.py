@@ -6,11 +6,9 @@ from symmer.operators import AntiCommutingOp
 from symmer.utils import exact_gs_energy
 from symmer.evolution.exponentiation import *
 from symmer.evolution.decomposition import *
-from vqe.measurements import measureObservable
 from tomography.cst import ClassicalShadow
 from qiskit import QuantumCircuit
-from scipy.sparse import csr_array, csr_matrix, kron
-from functools import reduce
+from scipy.sparse import csr_array
 
 # Set up directories
 cwd = os.getcwd()
@@ -21,10 +19,6 @@ ham_data_dir = os.path.join(test_dir, 'hamiltonian_data')
 shadow_data_dir = os.path.join(cwd, 'shadow_data')
 random_pauli_shadow_data_dir = os.path.join(shadow_data_dir, 'random_pauli')
 random_clifford_shadow_data_dir = os.path.join(shadow_data_dir, 'random_clifford')
-vqe_data_dir = os.path.join(cwd, 'vqe_data')
-basic_vqe_data_dir = os.path.join(vqe_data_dir, 'basic')
-unitary_partitioning_vqe_data_dir = os.path.join(vqe_data_dir, 'unitary_partitioning')
-exact_data_dir = os.path.join(cwd, 'exact_data')
 random_pauli_10000_dir = os.path.join(shadow_data_dir, "pauli_10000")
 random_clifford_10000_dir = os.path.join(shadow_data_dir, "clifford_10000")
 
@@ -39,9 +33,9 @@ for ham in ham_list:
 sorted_list = sorted(zip(ham_list, num_qubits), key = lambda x: x[1])
 ham_list = [ham for ham,_ in sorted_list]
 
-total_measurement_budget = 1000
+total_measurement_budget = 10000
 
-for filename in ham_list[25:30]:
+for filename in ham_list[:20]:
 
     print(filename)
 
@@ -59,12 +53,6 @@ for filename in ham_list[25:30]:
     gs_nrg_tap, gs_psi_tap = exact_gs_energy(H_taper.to_sparse_matrix)
     print("gs_nrg_tap = ", gs_nrg_tap)
 
-    # # Check that gs_psi_tap is the true gs
-    # nrg_calc = 0
-    # for p in range(H_taper.n_terms):
-    #     nrg_calc += H_taper.coeff_vec[p] * single_term_expval(H_taper[p], gs_psi_tap)
-    # print(nrg_calc)
-
     # Get qiskit circuit preparing gs_psi_tap
     sp_circ = QuantumCircuit(gs_psi_tap.n_qubits)
     gs_psi_tap_dict = gs_psi_tap.to_dictionary
@@ -81,39 +69,8 @@ for filename in ham_list[25:30]:
     sp_circ.prepare_state(gs_psi_tap_array)
     gs_psi_tap_array = csr_array(gs_psi_tap_array).transpose()
 
-    # Run a quantum experiment to estimate gs energy given gs_psi_tap and H_taper
-    sp_circ_copy = sp_circ.copy()
-    gs_nrg_basic_vqe = measureObservable(sp_circ_copy, range(sp_circ_copy.num_qubits), H_taper, shots=total_measurement_budget, total_shots_provided=True)
-    print("gs_nrg_basic_vqe = " , gs_nrg_basic_vqe)
-
-    with open(os.path.join(basic_vqe_data_dir, filename), 'w') as file:
-        data = {"total measurement budget" : total_measurement_budget, 
-                "gs_nrg_tap" : str(gs_nrg_tap),
-                "gs_nrg_basic_vqe" : str(gs_nrg_basic_vqe)}
-        json.dump(data,file)
-
-    # Run a quantum experiment to estimate gs energy given gs_psi_tap and H_taper using unitary partitioning
     clique_cover = H_taper.clique_cover(edge_relation='AC')
-    gs_nrg_up_vqe = 0
-    for clique in clique_cover.values():
-        ac_op = AntiCommutingOp.from_PauliwordOp(clique)
-        pop,rots,w,op = ac_op.unitary_partitioning()
-        op_mat = op.to_sparse_matrix
-        sp_circ_copy = sp_circ.copy()
-        if rots != None:
-            rots = rots[::-1]
-            for rot, coeff in rots:
-                rot = rot * (-0.5*coeff)
-                rot = PauliwordOp_to_QuantumCircuit(rot)           
-                sp_circ_copy = sp_circ_copy.compose(rot, list(range(sp_circ_copy.num_qubits)))
-        gs_nrg_up_vqe += w * measureObservable(sp_circ_copy, range(sp_circ_copy.num_qubits), pop, shots=total_measurement_budget, total_shots_provided=True)
-    print("gs_nrg_up_vqe = " , gs_nrg_up_vqe)
-    with open(os.path.join(unitary_partitioning_vqe_data_dir, filename), 'w') as file:
-        data = {"total_measurement_budget" : total_measurement_budget,
-                "gs_nrg_tap" : str(gs_nrg_tap),
-                "gs_nrg_up_vqe" : str(gs_nrg_up_vqe)}
-        json.dump(data, file)
-
+  
     # Estimate gs energy given gs_psi_tap and H_taper using classical shadows
     sp_circ_copy = sp_circ.copy()
     H_taper_dict = H_taper.to_dictionary
@@ -143,12 +100,14 @@ for filename in ham_list[25:30]:
     with open(os.path.join(random_clifford_10000_dir, filename), 'w') as file:
         shadow_data = {}
         for i in range(len(classical_shadow.shadows)):
-            shadow = classical_shadow.shadows[i]
-            # shadow_data[i] = {"data": str(shadow.data.tolist()), "indices": str(shadow.nonzero()[0].tolist()), "indptr": str(shadow.nonzero()[1].tolist())}
+            matrix, bitstring = classical_shadow.shadows[i]
+            matrix = matrix.qasm()
+            shadow_data[i] = (matrix, bitstring)
         data = {"num_shadows" : total_measurement_budget,
                 "gs_nrg_tap" : str(gs_nrg_tap),
                 "gs_nrg_tap_cst" : str(gs_nrg_tap_cst),
-                "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up)
+                "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up),
+                "shadow" : shadow_data
                 }
         json.dump(data, file)
 
@@ -181,14 +140,12 @@ for filename in ham_list[25:30]:
     with open(os.path.join(random_pauli_10000_dir, filename), 'w') as file:
         shadow_data = {}
         for i in range(len(classical_shadow.shadows)):
-            shadow = classical_shadow.shadows[i]
-            # shadow_data[i] = {"data": str(shadow.data.tolist()), "indices": str(shadow.nonzero()[0].tolist()), "indptr": str(shadow.nonzero()[1].tolist())}
+            pauli_list, bitstring = classical_shadow.shadows[i]
+            shadow_data[i] = (pauli_list, bitstring)
         data = {"num_shadows" : total_measurement_budget,
                 "gs_nrg_tap" : str(gs_nrg_tap),
                 "gs_nrg_tap_cst" : str(gs_nrg_tap_cst),
-                "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up)
+                "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up),
+                "shadow" : shadow_data
                 }
         json.dump(data, file)
-
-#### N.B. to reconstruct the csr_matrix for each shadow:
-#### mat = csr_matrix((obj['data'], (obj['indices'], obj['indptr'])))

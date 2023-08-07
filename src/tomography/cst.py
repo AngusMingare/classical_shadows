@@ -4,12 +4,14 @@ from qiskit import QuantumCircuit, Aer, execute
 from qiskit.quantum_info import random_clifford
 from functools import reduce
 from typing import List
+from symmer import PauliwordOp
 
 
 class ClassicalShadow:
     def __init__(self, circ, observables):
         self.allowed_measurement_bases = ["pauli", "random clifford"]
         self.shadows = []
+        self.sparse_shadows = []
         self.num_shadows = 0 
         self.unitary_ensemble = None
         self.preparation_circuit = circ
@@ -36,7 +38,7 @@ class ClassicalShadow:
     def sampleRandomCliffordEnsemble(self):
         cliff = random_clifford(self.num_qubits)
         clifford_matrix = csr_array(cliff.to_matrix())
-        clifford_unitary = cliff.to_instruction()
+        clifford_unitary = cliff.to_circuit()
         return clifford_unitary, clifford_matrix
     
     def getUnitaryFromCirc(self, circ):
@@ -79,37 +81,11 @@ class ClassicalShadow:
 
             bitstring = get_shot(matrix)
 
-            zero = np.array([1,0])
-            one = np.array([0,1])
-            h = csr_matrix(np.array([[1/np.sqrt(2), 1/np.sqrt(2)],[1/np.sqrt(2), -1/np.sqrt(2)]]))
-            sdg = csr_matrix(np.array([[1,0],[0,-1j]]))
+            if unitary_ensemble == "pauli":
+                snapshots.append((pauli_list, bitstring))
+            elif unitary_ensemble == "random clifford":
+                snapshots.append((unitary, bitstring))
 
-            # Apply U^dagger
-            if unitary_ensemble == "random clifford":
-                def bitstring_to_array(bitstring):
-                    temp = [zero if bit == '0' else one for bit in bitstring]
-                    vec = reduce(np.kron, temp)
-                    return csr_matrix(np.outer(vec, vec))
-                bitstring_array = bitstring_to_array(bitstring)
-                snapshot = matrix.getH() @ bitstring_array @ matrix
-                snapshots.append(snapshot)
-
-            elif unitary_ensemble == "pauli":
-                bitstring = bitstring[::-1]
-                def get_sq_snapshots(bitstring, p_list):
-
-                    bitvals = [np.outer(zero,zero) if bit == '0' else np.outer(one,one) for bit in bitstring]
-                    def pauli_to_mat(p):
-                        if p == 'x': return h
-                        elif p == 'y': return h @ sdg 
-                        else: return csr_matrix(np.eye(2))
-                    us = [pauli_to_mat(p) for p in p_list]
-                    udgs = [u.getH() for u in us]
-
-                    snapshot = [csr_matrix(udgs[i] @ bitvals[i] @ us[i]) for i in range(self.num_qubits)]
-                    return snapshot
-                snapshot = get_sq_snapshots(bitstring, pauli_list)
-                snapshots.append(snapshot)
         return snapshots
 
     def getQuantumChannel(self, unitary_ensemble):
@@ -138,19 +114,69 @@ class ClassicalShadow:
 
     def createClassicalShadows(self, unitary_ensemble, num_shadows):
         snapshots = self.getSnapshots(unitary_ensemble, num_shadows)
-        print("snapshots collected")
-        channel = self.getQuantumChannel(unitary_ensemble)
-        self.shadows = [channel(snapshots[i]) for i in range(num_shadows)]
-        print("shadows obtained")
+        self.shadows = [snapshots[i] for i in range(num_shadows)]
         return 
 
+    def getSparseShadows(self):
+            
+            zero = np.array([1,0])
+            one = np.array([0,1])
+            h = csr_matrix(np.array([[1/np.sqrt(2), 1/np.sqrt(2)],[1/np.sqrt(2), -1/np.sqrt(2)]]))
+            sdg = csr_matrix(np.array([[1,0],[0,-1j]]))
+
+            channel = self.getQuantumChannel(self.unitary_ensemble)
+
+            for i in range(self.num_shadows):
+
+                if self.unitary_ensemble == "random clifford":
+                    circ, bitstring = self.shadows[i]
+                    matrix = self.getUnitaryFromCirc(circ)
+                    def bitstring_to_array(bitstring):
+                        temp = [zero if bit == '0' else one for bit in bitstring]
+                        vec = reduce(np.kron, temp)
+                        return csr_matrix(np.outer(vec, vec))
+                    bitstring_array = bitstring_to_array(bitstring)
+                    sparse_snapshot = matrix.getH() @ bitstring_array @ matrix
+                    sparse_shadow = channel(sparse_snapshot)
+                    self.sparse_shadows.append(sparse_shadow)
+
+                elif self.unitary_ensemble == "pauli":
+                    pauli_list, bitstring = self.shadows[i]
+                    circ = QuantumCircuit(self.num_qubits)
+                    for i in range(len(pauli_list)):
+                        pauli = pauli_list[i]
+                        if pauli == "x":
+                            circ.h(i)
+                        elif pauli == "y":
+                            circ.sdg(i)
+                            circ.h(i)
+                        elif pauli == "z":
+                            pass
+                    matrix = self.getUnitaryFromCirc(circ)
+                    bitstring = bitstring[::-1]
+                    def get_sq_snapshots(bitstring, p_list):
+                        bitvals = [np.outer(zero,zero) if bit == '0' else np.outer(one,one) for bit in bitstring]
+                        def pauli_to_mat(p):
+                            if p == 'x': return h
+                            elif p == 'y': return h @ sdg 
+                            else: return csr_matrix(np.eye(2))
+                        us = [pauli_to_mat(p) for p in p_list]
+                        udgs = [u.getH() for u in us]
+                        snapshot = [csr_matrix(udgs[i] @ bitvals[i] @ us[i]) for i in range(self.num_qubits)]
+                        return snapshot
+                    sparse_snapshot = get_sq_snapshots(bitstring, pauli_list)
+                    sparse_shadow = channel(sparse_snapshot)
+                    self.sparse_shadows.append(sparse_shadow)
+            return
+
     def binShadows(self, num_bins):
+        self.getSparseShadows()
         size_of_bin = int(np.floor(self.num_shadows / num_bins))
         binned_shadows = []
         for i in range(num_bins-1):
-            binned_shadow = (1/size_of_bin) * np.sum(self.shadows[i*size_of_bin : (i+1)*size_of_bin])
+            binned_shadow = (1/size_of_bin) * np.sum(self.sparse_shadows[i*size_of_bin : (i+1)*size_of_bin])
             binned_shadows.append(binned_shadow)
-        remaining_shadows = self.shadows[size_of_bin * (num_bins - 1) :]
+        remaining_shadows = self.sparse_shadows[size_of_bin * (num_bins - 1) :]
         num_remaining_shadows = len(remaining_shadows)
         binned_shadow = (1/num_remaining_shadows) * np.sum(remaining_shadows)
         binned_shadows.append(binned_shadow)
