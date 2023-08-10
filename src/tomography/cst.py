@@ -34,7 +34,7 @@ class ClassicalShadow:
                 pass
 
         return pauli_unitary, pauli_list
-    
+
     def sampleRandomCliffordEnsemble(self):
         cliff = random_clifford(self.num_qubits)
         clifford_matrix = csr_array(cliff.to_matrix())
@@ -42,10 +42,18 @@ class ClassicalShadow:
         return clifford_unitary, clifford_matrix
     
     def getUnitaryFromCirc(self, circ):
-        backend = Aer.get_backend("unitary_simulator")
-        job = execute(circ, backend=backend)
-        result = job.result()
-        return csr_array(result.get_unitary(circ, 9))
+        if isinstance(circ, QuantumCircuit):
+            backend = Aer.get_backend("unitary_simulator")
+            job = execute(circ, backend=backend)
+            result = job.result()
+            return csr_array(result.get_unitary(circ, 9))
+        elif isinstance(circ, str):
+            qc = QuantumCircuit.from_qasm_str(circ)
+            backend = Aer.get_backend("unitary_simulator")
+            job = execute(qc, backend=backend)
+            result = job.result()
+            return csr_array(result.get_unitary(qc, 9))
+            
     
     def getSnapshots(self, unitary_ensemble, num_shadows):
         if not isinstance(unitary_ensemble, str):
@@ -127,7 +135,6 @@ class ClassicalShadow:
             channel = self.getQuantumChannel(self.unitary_ensemble)
 
             for i in range(self.num_shadows):
-
                 if self.unitary_ensemble == "random clifford":
                     circ, bitstring = self.shadows[i]
                     matrix = self.getUnitaryFromCirc(circ)
@@ -142,27 +149,17 @@ class ClassicalShadow:
 
                 elif self.unitary_ensemble == "pauli":
                     pauli_list, bitstring = self.shadows[i]
-                    circ = QuantumCircuit(self.num_qubits)
-                    for i in range(len(pauli_list)):
-                        pauli = pauli_list[i]
-                        if pauli == "x":
-                            circ.h(i)
-                        elif pauli == "y":
-                            circ.sdg(i)
-                            circ.h(i)
-                        elif pauli == "z":
-                            pass
-                    matrix = self.getUnitaryFromCirc(circ)
+
                     bitstring = bitstring[::-1]
                     def get_sq_snapshots(bitstring, p_list):
-                        bitvals = [np.outer(zero,zero) if bit == '0' else np.outer(one,one) for bit in bitstring]
+                        bitvals = [csr_matrix(np.outer(zero,zero)) if bit == '0' else csr_matrix(np.outer(one,one)) for bit in bitstring]
                         def pauli_to_mat(p):
                             if p == 'x': return h
                             elif p == 'y': return h @ sdg 
                             else: return csr_matrix(np.eye(2))
                         us = [pauli_to_mat(p) for p in p_list]
                         udgs = [u.getH() for u in us]
-                        snapshot = [csr_matrix(udgs[i] @ bitvals[i] @ us[i]) for i in range(self.num_qubits)]
+                        snapshot = [csr_matrix(udgs[j] @ bitvals[j] @ us[j]) for j in range(self.num_qubits)]
                         return snapshot
                     sparse_snapshot = get_sq_snapshots(bitstring, pauli_list)
                     sparse_shadow = channel(sparse_snapshot)

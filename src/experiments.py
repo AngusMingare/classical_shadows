@@ -35,7 +35,7 @@ ham_list = [ham for ham,_ in sorted_list]
 
 total_measurement_budget = 10000
 
-for filename in ham_list[:20]:
+for filename in ham_list[0:5]:
 
     print(filename)
 
@@ -71,52 +71,52 @@ for filename in ham_list[:20]:
 
     clique_cover = H_taper.clique_cover(edge_relation='AC')
   
-    # Estimate gs energy given gs_psi_tap and H_taper using classical shadows
-    sp_circ_copy = sp_circ.copy()
-    H_taper_dict = H_taper.to_dictionary
-    obs = list(H_taper_dict.keys())
-    classical_shadow = ClassicalShadow(sp_circ_copy, obs)
-    classical_shadow.createClassicalShadows(unitary_ensemble="random clifford", num_shadows=total_measurement_budget)
+    # # Estimate gs energy given gs_psi_tap and H_taper using classical shadows
+    # sp_circ_copy = sp_circ.copy()
+    # H_taper_dict = H_taper.to_dictionary
+    # obs = list(H_taper_dict.keys())
+    # classical_shadow = ClassicalShadow(sp_circ_copy, obs)
+    # classical_shadow.createClassicalShadows(unitary_ensemble="random clifford", num_shadows=total_measurement_budget)
 
-    classical_shadow.observables = [PauliwordOp.from_dictionary({o : w}).to_sparse_matrix for o,w in zip(list(H_taper_dict.keys()), list(H_taper_dict.values()))]
-    obs, results = classical_shadow.linearPredictions(10)
-    gs_nrg_tap_cst = 0
-    for w, exp in zip(list(H_taper_dict.values()), results):
-        gs_nrg_tap_cst += exp 
+    # classical_shadow.observables = [PauliwordOp.from_dictionary({o : w}).to_sparse_matrix for o,w in zip(list(H_taper_dict.keys()), list(H_taper_dict.values()))]
+    # obs, results = classical_shadow.linearPredictions(10)
+    # gs_nrg_tap_cst = 0
+    # for w, exp in zip(list(H_taper_dict.values()), results):
+    #     gs_nrg_tap_cst += exp 
 
-    # Estimate gs energy given gs_psi_tap and H_taper using unitary partitioning and classical shadows
-    classical_shadow.observables = []
-    weights = []
-    for clique in clique_cover.values():
-        ac_op = AntiCommutingOp.from_PauliwordOp(clique)
-        pop,rots,w,op = ac_op.unitary_partitioning()
-        classical_shadow.observables.append(op.to_sparse_matrix)
-        weights.append(w)
-    _, results = classical_shadow.linearPredictions(10)
-    gs_nrg_tap_cst_up = 0
-    for w, exp in zip(weights, results):
-        gs_nrg_tap_cst_up += w * exp 
+    # # Estimate gs energy given gs_psi_tap and H_taper using unitary partitioning and classical shadows
+    # classical_shadow.observables = []
+    # weights = []
+    # for clique in clique_cover.values():
+    #     ac_op = AntiCommutingOp.from_PauliwordOp(clique)
+    #     pop,rots,w,op = ac_op.unitary_partitioning()
+    #     classical_shadow.observables.append(op.to_sparse_matrix)
+    #     weights.append(w)
+    # _, results = classical_shadow.linearPredictions(10)
+    # gs_nrg_tap_cst_up = 0
+    # for w, exp in zip(weights, results):
+    #     gs_nrg_tap_cst_up += w * exp 
 
-    with open(os.path.join(random_clifford_10000_dir, filename), 'w') as file:
-        shadow_data = {}
-        for i in range(len(classical_shadow.shadows)):
-            matrix, bitstring = classical_shadow.shadows[i]
-            matrix = matrix.qasm()
-            shadow_data[i] = (matrix, bitstring)
-        data = {"num_shadows" : total_measurement_budget,
-                "gs_nrg_tap" : str(gs_nrg_tap),
-                "gs_nrg_tap_cst" : str(gs_nrg_tap_cst),
-                "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up),
-                "shadow" : shadow_data
-                }
-        json.dump(data, file)
+    # with open(os.path.join(random_clifford_10000_dir, filename), 'w') as file:
+    #     shadow_data = {}
+    #     for i in range(len(classical_shadow.shadows)):
+    #         matrix, bitstring = classical_shadow.shadows[i]
+    #         matrix = matrix.qasm()
+    #         shadow_data[i] = (matrix, bitstring)
+    #     data = {"num_shadows" : total_measurement_budget,
+    #             "gs_nrg_tap" : str(gs_nrg_tap),
+    #             "gs_nrg_tap_cst" : str(gs_nrg_tap_cst),
+    #             "gs_nrg_tap_cst_up" : str(gs_nrg_tap_cst_up),
+    #             "shadow" : shadow_data
+    #             }
+    #     json.dump(data, file)
 
     # Estimate gs energy given gs_nrg_tap and H_taper using classical shadows in the Pauli basis
     sp_circ_copy = sp_circ.copy()
     H_taper_dict = H_taper.to_dictionary
     obs = list(H_taper_dict.keys())
     classical_shadow = ClassicalShadow(sp_circ_copy, obs)
-    classical_shadow.createClassicalShadows(unitary_ensemble="pauli", num_shadows=1000)
+    classical_shadow.createClassicalShadows(unitary_ensemble="pauli", num_shadows=total_measurement_budget)
 
     classical_shadow.observables = [PauliwordOp.from_dictionary({o : w}).to_sparse_matrix for o,w in zip(list(H_taper_dict.keys()), list(H_taper_dict.values()))]
     obs, results = classical_shadow.linearPredictions(10)
@@ -142,6 +142,7 @@ for filename in ham_list[:20]:
         for i in range(len(classical_shadow.shadows)):
             pauli_list, bitstring = classical_shadow.shadows[i]
             shadow_data[i] = (pauli_list, bitstring)
+        print(gs_nrg_tap, gs_nrg_tap_cst)
         data = {"num_shadows" : total_measurement_budget,
                 "gs_nrg_tap" : str(gs_nrg_tap),
                 "gs_nrg_tap_cst" : str(gs_nrg_tap_cst),
