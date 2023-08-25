@@ -33,7 +33,7 @@ ham_list = [ham for ham,_ in sorted_list]
 
 total_measurement_budget = 10000
 
-for filename in ham_list[:20]:
+for filename in ham_list[:4]:
 
     print(filename)
 
@@ -75,6 +75,7 @@ for filename in ham_list[:20]:
     sp_circ_copy = sp_circ.copy()
     H_taper_dict = H_taper.to_dictionary
     obs = list(H_taper_dict.keys())
+    print(sum(list(H_taper_dict.values())))
     classical_shadow = ClassicalShadow(sp_circ_copy, obs, H_taper)
     classical_shadow.createClassicalShadows(unitary_ensemble="biased clifford", num_shadows=total_measurement_budget)
 
@@ -84,10 +85,6 @@ for filename in ham_list[:20]:
     for w, exp in zip(list(H_taper_dict.values()), results):
         gs_nrg_tap_cst += exp 
     print("gs_nrg_tap_cst = ", str(gs_nrg_tap_cst))
-
-    # classical_shadow.total_measurement_budget = 1000
-    # estimate = classical_shadow.OGMPauliEstimator("importance sampling")
-    # print("estimate = ", str(estimate))
 
     # Estimate gs energy given gs_psi_tap and H_taper using unitary partitioning and classical shadows
     classical_shadow.observables = []
@@ -125,3 +122,7 @@ for filename in ham_list[:20]:
                 "shadow" : shadow_data
                 }
         json.dump(data, file)
+
+    # classical_shadow.total_measurement_budget = 1000
+    # estimate = classical_shadow.OGMPauliEstimator("importance sampling")
+    # print("estimate = ", str(estimate))

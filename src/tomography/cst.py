@@ -2,10 +2,13 @@ import numpy as np
 from scipy.sparse import csr_matrix, kron, csr_array, linalg
 from qiskit import QuantumCircuit, Aer, execute
 from qiskit.extensions import UnitaryGate
-from qiskit.quantum_info import random_clifford
+from qiskit.quantum_info import random_clifford, Clifford
 from functools import reduce
 from typing import List
-from symmer.operators import AntiCommutingOp, IndependentOp
+from symmer.operators import AntiCommutingOp, IndependentOp, PauliwordOp
+from qiskit.circuit import QuantumCircuit
+from qiskit.circuit.library import PauliEvolutionGate
+from qiskit.opflow import I, Z, X, Y
 
 class ClassicalShadow:
     def __init__(self, circ, observables, hamiltonian=None):
@@ -45,11 +48,24 @@ class ClassicalShadow:
         return clifford_unitary, clifford_matrix
     
     def sampleBiasedCliffordEnsemble(self):
-        clique_cover = list(self.hamiltonian.clique_cover(edge_relation='C').values())
-        clique = np.random.choice(clique_cover)
+        num_terms = len(list(self.hamiltonian.to_dictionary.keys()))
+        num_terms_to_keep = np.random.choice(range(min(10, int(round(num_terms/4))), num_terms))
+        sub_hamiltonian = {}
+        kept_terms = np.random.choice(list(self.hamiltonian.to_dictionary.keys()), size=num_terms_to_keep)
+        for term in kept_terms:
+            sub_hamiltonian[term] = self.hamiltonian.to_dictionary[term]
+        sub_hamiltonian_op = PauliwordOp.from_dictionary(sub_hamiltonian)
+        clique = sub_hamiltonian_op.largest_clique('C')
         independent_op = IndependentOp.symmetry_generators(clique)
         independent_op.generate_stabilizer_rotations()
         stabilizer_rotations = independent_op.stabilizer_rotations
+
+        # commuting_clique_cover = list(self.hamiltonian.clique_cover(edge_relation='C').values())
+        # clique = np.random.choice(commuting_clique_cover)
+        # independent_op = IndependentOp.symmetry_generators(clique)
+        # independent_op.generate_stabilizer_rotations()
+        # stabilizer_rotations = independent_op.stabilizer_rotations
+
         clifford_matrix = csr_array(np.eye(2**self.num_qubits))
         x_mat = csr_array(np.array([[0,1],[1,0]]))
         y_mat = csr_array(np.array([[0,-1j],[1j,0]]))
@@ -65,11 +81,24 @@ class ClassicalShadow:
                 else: to_be_tensored.append(id_mat)
             p_rot_mat = reduce(kron, to_be_tensored)
             clifford_matrix = linalg.expm(p_rot_mat.multiply(1j * (np.pi/4))) @ clifford_matrix
-        
         clifford_unitary = QuantumCircuit(self.num_qubits)
         unitary = UnitaryGate(clifford_matrix.todense())
         clifford_unitary.append(unitary, list(range(self.num_qubits))[::-1])
 
+        # clifford_unitary = QuantumCircuit(self.num_qubits)
+        # for rot, _ in stabilizer_rotations:
+        #     p_rot = rot.to_qiskit
+        #     evo = PauliEvolutionGate(p_rot, time=np.pi/4)
+        #     clifford_unitary.append(evo, list(range(self.num_qubits))[::-1])
+        # clifford_matrix = self.getUnitaryFromCirc(clifford_unitary)
+
+        # clifford_unitary = QuantumCircuit(self.num_qubits)
+        # for rot, _ in stabilizer_rotations:
+        #     p_rot = list(rot.to_dictionary.keys())[0]
+        #     qc = pauli_string_to_circ(p_rot)
+        #     clifford_unitary = clifford_unitary + qc
+        # clifford_matrix = self.getUnitaryFromCirc(clifford_unitary)
+        
         return clifford_unitary, clifford_matrix
 
     def sampleGloballyBiasedPauliEnsemble(self):
@@ -124,7 +153,11 @@ class ClassicalShadow:
             elif unitary_ensemble == "random clifford":
                 unitary, matrix = self.sampleRandomCliffordEnsemble()
             elif unitary_ensemble == "biased clifford":
-                unitary, matrix = self.sampleBiasedCliffordEnsemble()
+                idx = np.random.choice([0,1], p=[1.0, 0.0])
+                if idx == 0:
+                    unitary, matrix = self.sampleBiasedCliffordEnsemble()
+                else:
+                    unitary, matrix = self.sampleRandomCliffordEnsemble()
 
             def get_shot(u):
                 final_state = u @ sp_state
@@ -397,6 +430,61 @@ class ClassicalShadow:
         final_estimate = np.mean(estimates)
 
         return final_estimate
+
+
+def pauli_string_to_circ(pauli_string):
+    pauli_string_split = [*pauli_string]
+    qc = QuantumCircuit(len(pauli_string_split))
+    non_id = []
+
+    for idx in range(len(pauli_string_split)):
+        pauli_op = pauli_string_split[idx]
+        if pauli_op == "X":
+            non_id.append(idx)
+            qc.h(idx)
+        elif pauli_op == "Y":
+            non_id.append(idx)
+            qc.sdg(idx)
+            qc.h(idx)
+        elif pauli_op == "Z":
+            non_id.append(idx)
+        else:
+            pass
+
+        if len(non_id) == 0:
+            return qc
+        
+        for x in range(len(non_id)-1):
+            idx = non_id[x]
+            idxp1 = non_id[x+1]
+            qc.cnot(idx, idxp1)
+        
+        qc.s(non_id[-1])
+
+        for x in range(len(non_id)-1):
+            len_non_id = len(non_id)
+            idx = non_id[len_non_id-1-x-1]
+            idxp1 = non_id[len_non_id-1-x]
+            qc.cnot(idx, idxp1)
+
+    for idx in range(len(pauli_string_split)):
+        pauli_op = pauli_string_split[idx]
+        if pauli_op == "X":
+            qc.h(idx)
+        elif pauli_op == "Y":
+            qc.h(idx)
+            qc.s(idx)
+        else:
+            pass
+
+    return qc
+        
+
+
+
+
+        
+
 
 
 if __name__ == "__main__":
