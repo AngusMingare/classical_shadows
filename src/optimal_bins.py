@@ -186,50 +186,19 @@ for vals in big_cliff_dict.values():
         elif bins == "13":
             big_rel_error_13_bins.append(float(err))
 
-# fig, ax = plt.subplots(2,1)
-# x0 = molecule_list
-# x1 = big_molecule_list
-# ax[0].plot(x0, rel_error_1_bins, x0, rel_error_4_bins, x0, rel_error_7_bins, x0, rel_error_10_bins, x0, rel_error_13_bins, marker='x', linestyle="None")
-# ax[0].set_xlabel("Molecule")
-# ax[1].plot(x1, big_rel_error_1_bins, x1, big_rel_error_4_bins, x1, big_rel_error_7_bins, x1, big_rel_error_10_bins, x1, big_rel_error_13_bins, marker='x', linestyle="None")
-# ax[1].set_xlabel("Molecule")
-
-# ax[0].axhline(y=np.mean(rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
-# ax[0].axhline(y=np.mean(rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
-# ax[0].axhline(y=np.mean(rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
-# ax[0].axhline(y=np.mean(rel_error_10_bins),c="c",linewidth=0.5,zorder=0)
-# ax[0].axhline(y=np.mean(rel_error_13_bins),c="m",linewidth=0.5,zorder=0)
-
-# ax[1].axhline(y=np.mean(big_rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
-# ax[1].axhline(y=np.mean(big_rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
-# ax[1].axhline(y=np.mean(big_rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
-# ax[1].axhline(y=np.mean(big_rel_error_10_bins),c="c",linewidth=0.5,zorder=0)
-# ax[1].axhline(y=np.mean(big_rel_error_13_bins),c="m",linewidth=0.5,zorder=0)
-
-# xlabels0 = [xx[m] for m in x0]
-# xlabels1 = [xx[m] for m in x1]
-# ax[0].set_xticklabels(xlabels0, rotation=0)
-# ax[0].set_ylabel("Relative Error")
-# ax[0].grid(True)
-# ax[1].set_xticklabels(xlabels1, rotation=0)
-# ax[1].set_ylabel("Relative Error")
-# ax[1].grid(True)
-# fig.set_figwidth(10.0)
-# fig.set_figheight(8.0)
-# fig.tight_layout(w_pad=0.0)
-# ax[0].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
-# ax[1].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
-# plt.savefig(os.path.join(plots_dir, "optimal_bins_both.png"))
-
 fig, ax = plt.subplots(2,1)
 x0 = molecule_list
 x1 = big_molecule_list
+ax[0].plot(x0, rel_error_1_bins, x0, rel_error_4_bins, x0, rel_error_7_bins, x0, rel_error_10_bins, x0, rel_error_13_bins, marker='x', linestyle="None")
+ax[0].set_xlabel("Molecule")
+ax[1].plot(x1, big_rel_error_1_bins, x1, big_rel_error_4_bins, x1, big_rel_error_7_bins, x1, big_rel_error_10_bins, x1, big_rel_error_13_bins, marker='x', linestyle="None")
+ax[1].set_xlabel("Molecule")
 
 ax[0].axhline(y=np.mean(rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
 ax[0].axhline(y=np.mean(rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
 ax[0].axhline(y=np.mean(rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
-ax[0].axhline(y=np.mean(rel_error_10_bins),c="gold",linewidth=0.5,zorder=0)
-ax[0].axhline(y=np.mean(rel_error_13_bins),c="indigo",linewidth=0.5,zorder=0)
+ax[0].axhline(y=np.mean(rel_error_10_bins),c="c",linewidth=0.5,zorder=0)
+ax[0].axhline(y=np.mean(rel_error_13_bins),c="m",linewidth=0.5,zorder=0)
 
 ax[1].axhline(y=np.mean(big_rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
 ax[1].axhline(y=np.mean(big_rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
@@ -237,10 +206,6 @@ ax[1].axhline(y=np.mean(big_rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
 ax[1].axhline(y=np.mean(big_rel_error_10_bins),c="c",linewidth=0.5,zorder=0)
 ax[1].axhline(y=np.mean(big_rel_error_13_bins),c="m",linewidth=0.5,zorder=0)
 
-ax[0].set_xlabel("Molecule")
-ax[1].set_xlabel("Molecule")
-ax[0].set_ylim(0.0, 0.4)
-ax[1].set_ylim(0.0, 0.1)
 xlabels0 = [xx[m] for m in x0]
 xlabels1 = [xx[m] for m in x1]
 ax[0].set_xticklabels(xlabels0, rotation=0)
@@ -254,4 +219,39 @@ fig.set_figheight(8.0)
 fig.tight_layout(w_pad=0.0)
 ax[0].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
 ax[1].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
-plt.savefig(os.path.join(plots_dir, "optimal_bins_means.png"))
+plt.savefig(os.path.join(plots_dir, "optimal_bins_both.png"))
+
+# fig, ax = plt.subplots(2,1)
+# x0 = molecule_list
+# x1 = big_molecule_list
+
+# ax[0].axhline(y=np.mean(rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
+# ax[0].axhline(y=np.mean(rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
+# ax[0].axhline(y=np.mean(rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
+# ax[0].axhline(y=np.mean(rel_error_10_bins),c="gold",linewidth=0.5,zorder=0)
+# ax[0].axhline(y=np.mean(rel_error_13_bins),c="indigo",linewidth=0.5,zorder=0)
+
+# ax[1].axhline(y=np.mean(big_rel_error_1_bins),c="b",linewidth=0.5,zorder=0)
+# ax[1].axhline(y=np.mean(big_rel_error_4_bins),c="g",linewidth=0.5,zorder=0)
+# ax[1].axhline(y=np.mean(big_rel_error_7_bins),c="r",linewidth=0.5,zorder=0)
+# ax[1].axhline(y=np.mean(big_rel_error_10_bins),c="c",linewidth=0.5,zorder=0)
+# ax[1].axhline(y=np.mean(big_rel_error_13_bins),c="m",linewidth=0.5,zorder=0)
+
+# ax[0].set_xlabel("Molecule")
+# ax[1].set_xlabel("Molecule")
+# ax[0].set_ylim(0.0, 0.4)
+# ax[1].set_ylim(0.0, 0.1)
+# xlabels0 = [xx[m] for m in x0]
+# xlabels1 = [xx[m] for m in x1]
+# ax[0].set_xticklabels(xlabels0, rotation=0)
+# ax[0].set_ylabel("Relative Error")
+# ax[0].grid(True)
+# ax[1].set_xticklabels(xlabels1, rotation=0)
+# ax[1].set_ylabel("Relative Error")
+# ax[1].grid(True)
+# fig.set_figwidth(10.0)
+# fig.set_figheight(8.0)
+# fig.tight_layout(w_pad=0.0)
+# ax[0].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
+# ax[1].legend(['1 bin', '4 bins', '7 bins', '10 bins', '13 bins'])
+# plt.savefig(os.path.join(plots_dir, "optimal_bins_means.png"))

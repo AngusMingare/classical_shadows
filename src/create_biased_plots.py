@@ -43,7 +43,8 @@ xx = {"B_STO-3G_DOUBLET_JW.json" : "b", "Be_STO-3G_SINGLET_BK.json" : "g", "H2_6
 
 fig, ax = plt.subplots(1,1)
 x = molecule_list
-ax.plot(x, random_clifford_cst_rel_error, x, biased_clifford_cst_rel_error, marker='x', linestyle="None")
+ax.scatter(x, random_clifford_cst_rel_error, c='b', marker='x')
+ax.scatter(x, biased_clifford_cst_rel_error, c='g', marker='o')
 ax.set_xlabel("Molecule")
 xlabels0 = [xx[m] for m in x]
 ax.set_xticklabels(xlabels0, rotation=0)

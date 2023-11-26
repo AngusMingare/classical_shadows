@@ -23,6 +23,11 @@ class ClassicalShadow:
         self.hamiltonian = hamiltonian
         self.weights = []
         self.total_measurement_budget = 0
+        self.biased_clifford_stabilizer_rotations = []
+        self.biased_clifford_cliques = []
+        self.biased_clifford_generators = []
+        self.prob_biased = 1.0
+        self.commuting_clique = list(self.hamiltonian.clique_cover(edge_relation='C').values())
 
     def samplePauliEnsemble(self):
         pauli_unitary = QuantumCircuit(self.num_qubits)
@@ -44,59 +49,73 @@ class ClassicalShadow:
     def sampleRandomCliffordEnsemble(self):
         cliff = random_clifford(self.num_qubits)
         clifford_matrix = csr_array(cliff.to_matrix())
-        clifford_unitary = cliff.to_circuit()
+        clifford_unitary = cliff.to_circuit() 
+
         return clifford_unitary, clifford_matrix
     
     def sampleBiasedCliffordEnsemble(self):
-        num_terms = len(list(self.hamiltonian.to_dictionary.keys()))
-        num_terms_to_keep = np.random.choice(range(min(10, int(round(num_terms/4))), num_terms))
-        sub_hamiltonian = {}
-        kept_terms = np.random.choice(list(self.hamiltonian.to_dictionary.keys()), size=num_terms_to_keep)
-        for term in kept_terms:
-            sub_hamiltonian[term] = self.hamiltonian.to_dictionary[term]
-        sub_hamiltonian_op = PauliwordOp.from_dictionary(sub_hamiltonian)
-        clique = sub_hamiltonian_op.largest_clique('C')
-        independent_op = IndependentOp.symmetry_generators(clique)
-        independent_op.generate_stabilizer_rotations()
-        stabilizer_rotations = independent_op.stabilizer_rotations
-
-        # commuting_clique_cover = list(self.hamiltonian.clique_cover(edge_relation='C').values())
-        # clique = np.random.choice(commuting_clique_cover)
+        # num_terms = len(list(self.hamiltonian.to_dictionary.keys()))
+        # num_terms_to_keep = np.random.choice(range(min(10, int(np.log(num_terms))), num_terms))
+        # sub_hamiltonian = {}
+        # kept_terms = np.random.choice(list(self.hamiltonian.to_dictionary.keys()), size=num_terms_to_keep)
+        # for term in kept_terms:
+        #     sub_hamiltonian[term] = self.hamiltonian.to_dictionary[term]
+        # sub_hamiltonian_op = PauliwordOp.from_dictionary(sub_hamiltonian)
+        # clique = sub_hamiltonian_op.largest_clique('C')
         # independent_op = IndependentOp.symmetry_generators(clique)
         # independent_op.generate_stabilizer_rotations()
         # stabilizer_rotations = independent_op.stabilizer_rotations
+        # self.biased_clifford_stabilizer_rotations.append(stabilizer_rotations)
 
-        clifford_matrix = csr_array(np.eye(2**self.num_qubits))
-        x_mat = csr_array(np.array([[0,1],[1,0]]))
-        y_mat = csr_array(np.array([[0,-1j],[1j,0]]))
-        z_mat = csr_array(np.array([[1,0],[0,-1]]))
-        id_mat = csr_array(np.eye(2))
-        for rot, _ in stabilizer_rotations:
-            p_rot = [*list(rot.to_dictionary.keys())[0]]
-            to_be_tensored = []
-            for p in p_rot:
-                if p == "X": to_be_tensored.append(x_mat)
-                elif p == "Y": to_be_tensored.append(y_mat)
-                elif p == "Z": to_be_tensored.append(z_mat)
-                else: to_be_tensored.append(id_mat)
-            p_rot_mat = reduce(kron, to_be_tensored)
-            clifford_matrix = linalg.expm(p_rot_mat.multiply(1j * (np.pi/4))) @ clifford_matrix
-        clifford_unitary = QuantumCircuit(self.num_qubits)
-        unitary = UnitaryGate(clifford_matrix.todense())
-        clifford_unitary.append(unitary, list(range(self.num_qubits))[::-1])
+        # commuting_clique_cover = list(self.hamiltonian.clique_cover(edge_relation='C', strategy='random_sequential').values())
+        commuting_clique_cover = list(self.hamiltonian.clique_cover(edge_relation='C').values())
+        # commuting_clique_cover = self.commuting_clique
+        clique = np.random.choice(commuting_clique_cover)
+        # clique = np.random.choice(commuting_clique_cover, p=[len(list(c.to_dictionary.keys())) / len(list(self.hamiltonian.to_dictionary.keys())) for c in commuting_clique_cover])
+        # print("CLIQUE")
+        # print(clique)
+        independent_op = IndependentOp.clique_generators(clique)
+        # print('INDEPENDENT OP')
+        # print(independent_op)
+        independent_op.generate_stabilizer_rotations()
+        self.biased_clifford_generators.append(independent_op)
+        stabilizer_rotations = independent_op.stabilizer_rotations
+        # print("STABILIZER ROTATIONS")
+        # print(stabilizer_rotations)
+        self.biased_clifford_stabilizer_rotations.append(stabilizer_rotations)
+        self.biased_clifford_cliques.append(clique)
 
-        # clifford_unitary = QuantumCircuit(self.num_qubits)
+        # clifford_matrix = csr_array(np.eye(2**self.num_qubits))
+        # x_mat = csr_array(np.array([[0,1],[1,0]]))
+        # y_mat = csr_array(np.array([[0,-1j],[1j,0]]))
+        # z_mat = csr_array(np.array([[1,0],[0,-1]]))
+        # id_mat = csr_array(np.eye(2))
         # for rot, _ in stabilizer_rotations:
-        #     p_rot = rot.to_qiskit
-        #     evo = PauliEvolutionGate(p_rot, time=np.pi/4)
-        #     clifford_unitary.append(evo, list(range(self.num_qubits))[::-1])
-        # clifford_matrix = self.getUnitaryFromCirc(clifford_unitary)
+        #     p_rot = [*list(rot.to_dictionary.keys())[0]]
+        #     to_be_tensored = []
+        #     for p in p_rot:
+        #         if p == "X": to_be_tensored.append(x_mat)
+        #         elif p == "Y": to_be_tensored.append(y_mat)
+        #         elif p == "Z": to_be_tensored.append(z_mat)
+        #         else: to_be_tensored.append(id_mat)
+        #     p_rot_mat = reduce(kron, to_be_tensored)
+        #     clifford_matrix = linalg.expm(p_rot_mat.multiply(1j * (np.pi/4))) @ clifford_matrix
+        # clifford_unitary = QuantumCircuit(self.num_qubits)
+        # unitary = UnitaryGate(clifford_matrix.todense())
+        # clifford_unitary.append(unitary, list(range(self.num_qubits))[::-1])
+
+        clifford_unitary = QuantumCircuit(self.num_qubits)
+        for rot, _ in stabilizer_rotations:
+            p_rot = rot.to_qiskit
+            evo = PauliEvolutionGate(p_rot, time=-np.pi/4)
+            clifford_unitary.append(evo, list(range(self.num_qubits)))
+        clifford_matrix = self.getUnitaryFromCirc(clifford_unitary)
 
         # clifford_unitary = QuantumCircuit(self.num_qubits)
         # for rot, _ in stabilizer_rotations:
         #     p_rot = list(rot.to_dictionary.keys())[0]
         #     qc = pauli_string_to_circ(p_rot)
-        #     clifford_unitary = clifford_unitary + qc
+        #     clifford_unitary.append(qc, list(range(self.num_qubits)))
         # clifford_matrix = self.getUnitaryFromCirc(clifford_unitary)
         
         return clifford_unitary, clifford_matrix
@@ -117,7 +136,7 @@ class ClassicalShadow:
             backend = Aer.get_backend("unitary_simulator")
             job = execute(circ, backend=backend)
             result = job.result()
-            return csr_array(result.get_unitary(circ, 9))
+            return csr_array(result.get_unitary(circ, 18))
         elif isinstance(circ, str):
             qc = QuantumCircuit.from_qasm_str(circ)
             backend = Aer.get_backend("unitary_simulator")
@@ -153,7 +172,8 @@ class ClassicalShadow:
             elif unitary_ensemble == "random clifford":
                 unitary, matrix = self.sampleRandomCliffordEnsemble()
             elif unitary_ensemble == "biased clifford":
-                idx = np.random.choice([0,1], p=[1.0, 0.0])
+                prob_biased = self.prob_biased
+                idx = np.random.choice([0,1], p=[prob_biased, 1-prob_biased])
                 if idx == 0:
                     unitary, matrix = self.sampleBiasedCliffordEnsemble()
                 else:
@@ -434,57 +454,52 @@ class ClassicalShadow:
 
 def pauli_string_to_circ(pauli_string):
     pauli_string_split = [*pauli_string]
-    qc = QuantumCircuit(len(pauli_string_split))
+    quant_circ = QuantumCircuit(len(pauli_string_split))
     non_id = []
 
     for idx in range(len(pauli_string_split)):
         pauli_op = pauli_string_split[idx]
         if pauli_op == "X":
             non_id.append(idx)
-            qc.h(idx)
+            quant_circ.h(idx)
         elif pauli_op == "Y":
             non_id.append(idx)
-            qc.sdg(idx)
-            qc.h(idx)
+            quant_circ.sdg(idx)
+            quant_circ.h(idx)
+            # quant_circ.rx(np.pi/2, idx)
         elif pauli_op == "Z":
             non_id.append(idx)
         else:
             pass
 
-        if len(non_id) == 0:
-            return qc
+    if len(non_id) == 0:
+        return quant_circ
         
-        for x in range(len(non_id)-1):
-            idx = non_id[x]
-            idxp1 = non_id[x+1]
-            qc.cnot(idx, idxp1)
+    for x in range(len(non_id)-1):
+        idx = non_id[x]
+        idxp1 = non_id[x+1]
+        quant_circ.cnot(idx, idxp1)
         
-        qc.s(non_id[-1])
+    quant_circ.sdg(non_id[-1])
 
-        for x in range(len(non_id)-1):
-            len_non_id = len(non_id)
-            idx = non_id[len_non_id-1-x-1]
-            idxp1 = non_id[len_non_id-1-x]
-            qc.cnot(idx, idxp1)
+    for x in range(len(non_id)-1):
+        len_non_id = len(non_id)
+        idx = non_id[len_non_id-1-x-1]
+        idxp1 = non_id[len_non_id-1-x]
+        quant_circ.cnot(idx, idxp1)
 
     for idx in range(len(pauli_string_split)):
         pauli_op = pauli_string_split[idx]
         if pauli_op == "X":
-            qc.h(idx)
+            quant_circ.h(idx)
         elif pauli_op == "Y":
-            qc.h(idx)
-            qc.s(idx)
+            quant_circ.h(idx)
+            quant_circ.s(idx)
+            # quant_circ.rx(-np.pi/2, idx)
         else:
             pass
-
-    return qc
-        
-
-
-
-
-        
-
+            
+    return quant_circ
 
 
 if __name__ == "__main__":
